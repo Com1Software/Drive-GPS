@@ -19,7 +19,9 @@ func main() {
 	fmt.Println("Drive-GPS")
 	fmt.Printf("Operating System : %s\n", runtime.GOOS)
 	clockwise := true
-	trim := 0
+	duration := 2000
+	speed := 50
+	// trim := 0
 	i2c, err := i2c.New(pca9685.Address, "/dev/i2c-1")
 	if err != nil {
 		log.Fatal(err)
@@ -63,94 +65,94 @@ func main() {
 	}
 
 	for {
-		line := ""
-		buff := make([]byte, 1)
-		maxlata := 0
-		minlata := 999999999
-		maxlona := 0
-		minlona := 999999999
-		maxlatb := 0
-		minlatb := 999999999
-		maxlonb := 0
-		minlonb := 999999999
-		on := true
-		for on != false {
-			line = ""
-			for {
-				n, err := port.Read(buff)
-				if err != nil {
-					log.Fatal(err)
-				}
-				if n == 0 {
-					fmt.Println("\nEOF")
-					break
-				}
-				line = line + string(buff[:n])
-				if strings.Contains(string(buff[:n]), "\n") {
-					break
+
+		for x := 0; x < duration; x++ {
+			line := ""
+			buff := make([]byte, 1)
+			maxlata := 0
+			minlata := 999999999
+			maxlona := 0
+			minlona := 999999999
+			maxlatb := 0
+			minlatb := 999999999
+			maxlonb := 0
+			minlonb := 999999999
+			on := true
+			for on != false {
+				line = ""
+				for {
+					n, err := port.Read(buff)
+					if err != nil {
+						log.Fatal(err)
+					}
+					if n == 0 {
+						fmt.Println("\nEOF")
+						break
+					}
+					line = line + string(buff[:n])
+					if strings.Contains(string(buff[:n]), "\n") {
+						break
+					}
+
 				}
 
-			}
+				id, latitude, longitude, ns, ew, speed, degree := getGPSPosition(line)
+				latdif := 0
+				londif := 0
+				if len(id) > 0 {
+					if len(latitude) > 0 {
+						l := strings.Split(latitude, ".")
+						la, _ := strconv.Atoi(l[0])
+						lb, _ := strconv.Atoi(l[1])
+						if la > maxlata {
+							maxlata = la
+						}
+						if lb > maxlatb {
+							maxlatb = lb
+						}
+						if la < minlata {
+							minlata = la
+						}
+						if lb < minlatb {
+							minlatb = lb
+						}
+						latdif = maxlata - minlata
+						latdif = maxlatb - minlatb
+						avg := maxlatb - latdif/2
+						off := lb - avg
+						fmt.Printf("Latitude maxb %d  minb %d  avg %d off %d\n", maxlatb, minlatb, avg, off)
+					}
+					if len(longitude) > 0 {
+						l := strings.Split(longitude, ".")
+						la, _ := strconv.Atoi(l[0])
+						lb, _ := strconv.Atoi(l[1])
+						if la > maxlona {
+							maxlona = la
+						}
+						if lb > maxlonb {
+							maxlonb = lb
+						}
+						if la < minlona {
+							minlona = la
+						}
+						if lb < minlonb {
+							minlonb = lb
+						}
+						londif = maxlona - minlona
+						londif = maxlonb - minlonb
+						avg := maxlonb - londif/2
+						off := lb - avg
+						fmt.Printf("Logitude maxb %d  minb %d avg %d off %d\n", maxlonb, minlonb, avg, off)
 
-			id, latitude, longitude, ns, ew, speed, degree := getGPSPosition(line)
-			latdif := 0
-			londif := 0
-			if len(id) > 0 {
-				if len(latitude) > 0 {
-					l := strings.Split(latitude, ".")
-					la, _ := strconv.Atoi(l[0])
-					lb, _ := strconv.Atoi(l[1])
-					if la > maxlata {
-						maxlata = la
 					}
-					if lb > maxlatb {
-						maxlatb = lb
-					}
-					if la < minlata {
-						minlata = la
-					}
-					if lb < minlatb {
-						minlatb = lb
-					}
-					latdif = maxlata - minlata
-					latdif = maxlatb - minlatb
-					avg := maxlatb - latdif/2
-					off := lb - avg
-					fmt.Printf("Latitude maxb %d  minb %d  avg %d off %d\n", maxlatb, minlatb, avg, off)
-				}
-				if len(longitude) > 0 {
-					l := strings.Split(longitude, ".")
-					la, _ := strconv.Atoi(l[0])
-					lb, _ := strconv.Atoi(l[1])
-					if la > maxlona {
-						maxlona = la
-					}
-					if lb > maxlonb {
-						maxlonb = lb
-					}
-					if la < minlona {
-						minlona = la
-					}
-					if lb < minlonb {
-						minlonb = lb
-					}
-					londif = maxlona - minlona
-					londif = maxlonb - minlonb
-					avg := maxlonb - londif/2
-					off := lb - avg
-					fmt.Printf("Logitude maxb %d  minb %d avg %d off %d\n", maxlonb, minlonb, avg, off)
-					if cw {
+
+					event := fmt.Sprintf("%s  latitude=%s  %s %d  longitude=%s %s %d knots=%s degrees=%s\n", id, latitude, ns, latdif, longitude, ew, londif, speed, degree)
+					fmt.Println(event)
+					if clockwise {
 					} else {
 					}
 
-				}
-
-				event := fmt.Sprintf("%s  latitude=%s  %s %d  longitude=%s %s %d knots=%s degrees=%s\n", id, latitude, ns, latdif, longitude, ew, londif, speed, degree)
-				fmt.Println(event)
-
-				for x := 0; x < 200; x++ {
-					i := 50
-					servo1.Angle(i)
+					servo1.Angle(speed)
 					if x > 100 {
 						servo0.Angle(65)
 					} else {
