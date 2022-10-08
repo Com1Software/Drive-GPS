@@ -96,7 +96,7 @@ func main() {
 
 				}
 
-				id, latitude, longitude, ns, ew, speed, degree := getGPSPosition(line)
+				id, latitude, longitude, ns, ew, gpsspeed, degree := getGPSPosition(line)
 				latdif := 0
 				londif := 0
 				if len(id) > 0 {
@@ -146,7 +146,7 @@ func main() {
 
 					}
 
-					event := fmt.Sprintf("%s  latitude=%s  %s %d  longitude=%s %s %d knots=%s degrees=%s\n", id, latitude, ns, latdif, longitude, ew, londif, speed, degree)
+					event := fmt.Sprintf("%s  latitude=%s  %s %d  longitude=%s %s %d knots=%s degrees=%s\n", id, latitude, ns, latdif, longitude, ew, londif, gpsspeed, degree)
 					fmt.Println(event)
 					if clockwise {
 					} else {
