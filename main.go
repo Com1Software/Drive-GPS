@@ -3,20 +3,39 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/googolgl/go-i2c"
+	"github.com/googolgl/go-pca9685"
 	"go.bug.st/serial"
 )
 
 //-------------------------------------------------------------------------
 func main() {
-	agent := SSE()
-	fmt.Println("GPS-Track-Recorder")
+
+	fmt.Println("Drive-GPS")
 	fmt.Printf("Operating System : %s\n", runtime.GOOS)
+	clockwise := true
+	trim := 0
+	i2c, err := i2c.New(pca9685.Address, "/dev/i2c-1")
+	if err != nil {
+		log.Fatal(err)
+	}
+	pca0, err0 := pca9685.New(i2c, nil)
+	if err0 != nil {
+		log.Fatal(err0)
+	}
+	pca1, err1 := pca9685.New(i2c, nil)
+	if err1 != nil {
+		log.Fatal(err1)
+	}
+	pca1.SetChannel(1, 0, 130)
+	pca0.SetChannel(0, 0, 130)
+	servo1 := pca1.ServoNew(1, nil)
+	servo0 := pca0.ServoNew(0, nil)
 
 	ports, err := serial.GetPortsList()
 	if err != nil {
@@ -43,98 +62,107 @@ func main() {
 		log.Fatal(err)
 	}
 
-	go func() {
-		for {
-			line := ""
-			buff := make([]byte, 1)
-			maxlata := 0
-			minlata := 999999999
-			maxlona := 0
-			minlona := 999999999
-			maxlatb := 0
-			minlatb := 999999999
-			maxlonb := 0
-			minlonb := 999999999
-			on := true
-			for on != false {
-				line = ""
-				for {
-					n, err := port.Read(buff)
-					if err != nil {
-						log.Fatal(err)
+	for {
+		line := ""
+		buff := make([]byte, 1)
+		maxlata := 0
+		minlata := 999999999
+		maxlona := 0
+		minlona := 999999999
+		maxlatb := 0
+		minlatb := 999999999
+		maxlonb := 0
+		minlonb := 999999999
+		on := true
+		for on != false {
+			line = ""
+			for {
+				n, err := port.Read(buff)
+				if err != nil {
+					log.Fatal(err)
+				}
+				if n == 0 {
+					fmt.Println("\nEOF")
+					break
+				}
+				line = line + string(buff[:n])
+				if strings.Contains(string(buff[:n]), "\n") {
+					break
+				}
+
+			}
+
+			id, latitude, longitude, ns, ew, speed, degree := getGPSPosition(line)
+			latdif := 0
+			londif := 0
+			if len(id) > 0 {
+				if len(latitude) > 0 {
+					l := strings.Split(latitude, ".")
+					la, _ := strconv.Atoi(l[0])
+					lb, _ := strconv.Atoi(l[1])
+					if la > maxlata {
+						maxlata = la
 					}
-					if n == 0 {
-						fmt.Println("\nEOF")
-						break
+					if lb > maxlatb {
+						maxlatb = lb
 					}
-					line = line + string(buff[:n])
-					if strings.Contains(string(buff[:n]), "\n") {
-						break
+					if la < minlata {
+						minlata = la
+					}
+					if lb < minlatb {
+						minlatb = lb
+					}
+					latdif = maxlata - minlata
+					latdif = maxlatb - minlatb
+					avg := maxlatb - latdif/2
+					off := lb - avg
+					fmt.Printf("Latitude maxb %d  minb %d  avg %d off %d\n", maxlatb, minlatb, avg, off)
+				}
+				if len(longitude) > 0 {
+					l := strings.Split(longitude, ".")
+					la, _ := strconv.Atoi(l[0])
+					lb, _ := strconv.Atoi(l[1])
+					if la > maxlona {
+						maxlona = la
+					}
+					if lb > maxlonb {
+						maxlonb = lb
+					}
+					if la < minlona {
+						minlona = la
+					}
+					if lb < minlonb {
+						minlonb = lb
+					}
+					londif = maxlona - minlona
+					londif = maxlonb - minlonb
+					avg := maxlonb - londif/2
+					off := lb - avg
+					fmt.Printf("Logitude maxb %d  minb %d avg %d off %d\n", maxlonb, minlonb, avg, off)
+					if cw {
+					} else {
 					}
 
 				}
 
-				id, latitude, longitude, ns, ew, speed, degree := getGPSPosition(line)
-				latdif := 0
-				londif := 0
-				if len(id) > 0 {
-					if len(latitude) > 0 {
-						l := strings.Split(latitude, ".")
-						la, _ := strconv.Atoi(l[0])
-						lb, _ := strconv.Atoi(l[1])
-						if la > maxlata {
-							maxlata = la
-						}
-						if lb > maxlatb {
-							maxlatb = lb
-						}
-						if la < minlata {
-							minlata = la
-						}
-						if lb < minlatb {
-							minlatb = lb
-						}
-						latdif = maxlata - minlata
-						latdif = maxlatb - minlatb
-						avg := maxlatb - latdif/2
-						off := lb - avg
-						fmt.Printf("Latitude maxb %d  minb %d  avg %d off %d\n", maxlatb, minlatb, avg, off)
-					}
-					if len(longitude) > 0 {
-						l := strings.Split(longitude, ".")
-						la, _ := strconv.Atoi(l[0])
-						lb, _ := strconv.Atoi(l[1])
-						if la > maxlona {
-							maxlona = la
-						}
-						if lb > maxlonb {
-							maxlonb = lb
-						}
-						if la < minlona {
-							minlona = la
-						}
-						if lb < minlonb {
-							minlonb = lb
-						}
-						londif = maxlona - minlona
-						londif = maxlonb - minlonb
-						avg := maxlonb - londif/2
-						off := lb - avg
-						fmt.Printf("Logitude maxb %d  minb %d avg %d off %d\n", maxlonb, minlonb, avg, off)
+				event := fmt.Sprintf("%s  latitude=%s  %s %d  longitude=%s %s %d knots=%s degrees=%s\n", id, latitude, ns, latdif, longitude, ew, londif, speed, degree)
+				fmt.Println(event)
+
+				for x := 0; x < 200; x++ {
+					i := 50
+					servo1.Angle(i)
+					if x > 100 {
+						servo0.Angle(65)
+					} else {
+						servo0.Angle(45)
 
 					}
+					time.Sleep(10 * time.Millisecond)
 
-					event := fmt.Sprintf("%s  latitude=%s  %s %d  longitude=%s %s %d knots=%s degrees=%s\n", id, latitude, ns, latdif, longitude, ew, londif, speed, degree)
-					fmt.Println(event)
-					agent.Notifier <- []byte(event)
 				}
 			}
 		}
-	}()
-
-	Openbrowser("http://localhost:8080")
-	log.Fatal("HTTP server error: ", http.ListenAndServe("localhost:8080", agent))
-
+	}
 }
 
 func getGPSPosition(sentence string) (string, string, string, string, string, string, string) {
@@ -190,86 +218,4 @@ func getGPSPosition(sentence string) (string, string, string, string, string, st
 	}
 
 	return id, latitude, longitude, ns, ew, speed, degree
-}
-
-// Openbrowser : Opens default web browser to specified url
-func Openbrowser(url string) error {
-	var cmd string
-	var args []string
-	switch runtime.GOOS {
-	case "windows":
-		cmd = "cmd"
-		args = []string{"/c", "start"}
-	case "linux":
-		cmd = "chromium-browser"
-		args = []string{""}
-
-	case "darwin":
-		cmd = "open"
-	default:
-		cmd = "xdg-open"
-	}
-	args = append(args, url)
-	return exec.Command(cmd, args...).Start()
-}
-
-type Agent struct {
-	Notifier    chan []byte
-	newuser     chan chan []byte
-	closinguser chan chan []byte
-	user        map[chan []byte]bool
-}
-
-func SSE() (agent *Agent) {
-	agent = &Agent{
-		Notifier:    make(chan []byte, 1),
-		newuser:     make(chan chan []byte),
-		closinguser: make(chan chan []byte),
-		user:        make(map[chan []byte]bool),
-	}
-	go agent.listen()
-	return
-}
-
-func (agent *Agent) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	flusher, ok := rw.(http.Flusher)
-	if !ok {
-		http.Error(rw, "Error ", http.StatusInternalServerError)
-		return
-	}
-	rw.Header().Set("Content-Type", "text/event-stream")
-	rw.Header().Set("Cache-Control", "no-cache")
-	rw.Header().Set("Connection", "keep-alive")
-	rw.Header().Set("Access-Control-Allow-Origin", "*")
-	mChan := make(chan []byte)
-	agent.newuser <- mChan
-	defer func() {
-		agent.closinguser <- mChan
-	}()
-	notify := req.Context().Done()
-	go func() {
-		<-notify
-		agent.closinguser <- mChan
-	}()
-	for {
-		fmt.Fprintf(rw, "%s", <-mChan)
-		flusher.Flush()
-	}
-
-}
-
-func (agent *Agent) listen() {
-	for {
-		select {
-		case s := <-agent.newuser:
-			agent.user[s] = true
-		case s := <-agent.closinguser:
-			delete(agent.user, s)
-		case event := <-agent.Notifier:
-			for userMChan, _ := range agent.user {
-				userMChan <- event
-			}
-		}
-	}
-
 }
